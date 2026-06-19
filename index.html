@@ -301,7 +301,7 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
     <div class="sep"></div>
     <div class="rrow">
       <div class="rlbl"><span>Slaap afgelopen nacht</span><span class="rval empty" id="sleep-val">&#8212;</span></div>
-      <input type="range" min="3" max="12" value="7" step="0.5" id="sleep-range" class="untouched" oninput="touchSlider(this,'sleep-val',parseFloat(this.value).toFixed(1)+'u');autosave()">
+      <input type="range" min="3" max="12" value="7.5" step="0.5" id="sleep-range" class="untouched" oninput="touchSlider(this,'sleep-val',parseFloat(this.value).toFixed(1)+'u');autosave()">
     </div>
     <div id="sleep-source" style="font-size:11px;color:var(--ink3);margin-top:4px;display:none">📲 Uit Apple Health</div>
   </div>
@@ -1336,43 +1336,68 @@ function reanalyzeMeal(){
 }
 async function analyseMeal(b64,mt,box,src,context){
   try{
-    var basePrompt='Je bent een voedingsdeskundige die iemand helpt energie, stemming, spijsvertering en huid te optimaliseren. Analyseer deze maaltijdfoto en geef:\n1) Wat je ziet\n2) Geschatte kcal (schrijf exact: "Kcal: [getal]")\n3) Macro schatting (schrijf exact in dit formaat: "Macros: eiwit=[getal]g, koolhydraten=[getal]g, vet=[getal]g, vezels=[getal]g")\n4) Energieniveau effect in 2-3 uur\n5) Mogelijke spijsvertering/huid aandachtspunten\n6) Één praktische tip\nWarm, beknopt, max 6 zinnen.';
-    if(context){
-      basePrompt+='\n\nBELANGRIJKE CONTEXT VAN GEBRUIKER (gebruik dit voor een nauwkeurigere schatting, bijv. voor portiegrootte of bereidingswijze die niet zichtbaar is op de foto): "'+context+'"';
+    var prompt='Analyseer deze maaltijdfoto als voedingsdeskundige. Geef antwoord ALLEEN als geldig JSON object, geen tekst eromheen, geen markdown:\n{"kcal":650,"eiwit":42,"koolhydraten":55,"vet":18,"vezels":6,"omschrijving":"Wat je ziet en een korte voedingstip in 2 zinnen in het Nederlands."}'+(context?'\n\nGebruikers context: "'+context+'"':'');
+    var r=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({type:'analysePhoto',photoType:'meal',imageData:b64,mediaType:mt,prompt:prompt})});
+    var d=await r.json();
+    var raw=d.analyse||d.answer||d.text||'';
+    if(!raw){throw new Error('Geen response ontvangen');}
+
+    // Parse JSON response
+    var parsed=null,dk=0,macros={protein:0,carbs:0,fat:0,fiber:0},omschrijving='';
+    try{
+      var clean=raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+      parsed=JSON.parse(clean);
+      dk=parseInt(parsed.kcal)||0;
+      macros.protein=parseInt(parsed.eiwit)||0;
+      macros.carbs=parseInt(parsed.koolhydraten)||0;
+      macros.fat=parseInt(parsed.vet)||0;
+      macros.fiber=parseInt(parsed.vezels)||0;
+      omschrijving=parsed.omschrijving||'';
+    }catch(je){
+      // JSON parse mislukt — regex fallback
+      omschrijving=raw;
+      var km=raw.match(/(\d{2,4})\s*kcal/i)||raw.match(/kcal[":]+\s*(\d{2,4})/i);
+      var pm=raw.match(/eiwit[":]+\s*(\d+)/i);
+      var cm=raw.match(/koolhydr\w*[":]+\s*(\d+)/i);
+      var fm=raw.match(/"vet"\s*:\s*(\d+)/i)||raw.match(/\bvet[":]+\s*(\d+)/i);
+      var fbm=raw.match(/vezels?[":]+\s*(\d+)/i);
+      if(km)dk=parseInt(km[1]);
+      if(pm)macros.protein=parseInt(pm[1]);
+      if(cm)macros.carbs=parseInt(cm[1]);
+      if(fm)macros.fat=parseInt(fm[1]);
+      if(fbm)macros.fiber=parseInt(fbm[1]);
     }
-    var r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:basePrompt}]}]})});
-    var d=await r.json();var t=d.content&&d.content[0]&&d.content[0].text;
-    box.className='ai-box';box.textContent=t||'Opgeslagen.';
+
+    // Vul sliders
+    function fillSlider(id,val,max,label){
+      var r=document.getElementById(id+'-range'),v=document.getElementById(id+'-val');
+      if(r&&val>0){r.value=Math.min(max,val);}
+      if(v&&val>0){v.textContent=val+label;}
+    }
+    fillSlider('meal-kcal',dk,1500,' kcal');
+    fillSlider('meal-protein',macros.protein,150,'g');
+    fillSlider('meal-carbs',macros.carbs,200,'g');
+    fillSlider('meal-fat',macros.fat,100,'g');
+    fillSlider('meal-fiber',macros.fiber,40,'g');
+
+    // Toon samenvatting
+    var summary=dk>0?'📊 '+dk+' kcal  🥩 '+macros.protein+'g  🍞 '+macros.carbs+'g  🧈 '+macros.fat+'g  🌾 '+macros.fiber+'g':'';
+    box.className='ai-box';
+    box.textContent=(summary?summary+'\n\n':'')+omschrijving+(dk===0?'\n\n⚠️ Kon geen waarden uitlezen — pas sliders handmatig aan. (Raw: '+raw.substring(0,150)+')':'');
     showMealProgress(-1);
     var reBtn=document.getElementById('reanalyze-btn');
     if(reBtn)reBtn.style.display='block';
-    var kcalMatch=t&&t.match(/kcal:?\s*(\d{2,4})/i);
-    var dk=0;
-    if(kcalMatch){
-      dk=parseInt(kcalMatch[1]);
-      var kr=document.getElementById('meal-kcal-range');
-      if(kr){kr.value=Math.min(1500,dk);setV('meal-kcal-val',dk+' kcal');}
-    }
-    var macros={protein:0,carbs:0,fat:0,fiber:0};
-    if(t){
-      var pMatch=t.match(/eiwit\w*\s*=\s*(\d+)/i);
-      var cMatch=t.match(/koolhydr\w*\s*=\s*(\d+)/i);
-      var fMatch=t.match(/vet\s*=\s*(\d+)/i);
-      var fbMatch=t.match(/vezels?\s*=\s*(\d+)/i);
-      if(pMatch)macros.protein=parseInt(pMatch[1]);
-      if(cMatch)macros.carbs=parseInt(cMatch[1]);
-      if(fMatch)macros.fat=parseInt(fMatch[1]);
-      if(fbMatch)macros.fiber=parseInt(fbMatch[1]);
-    }
-    var pr=document.getElementById('meal-protein-range');if(pr){pr.value=Math.min(150,macros.protein);setV('meal-protein-val',macros.protein+'g');}
-    var cr=document.getElementById('meal-carbs-range');if(cr){cr.value=Math.min(200,macros.carbs);setV('meal-carbs-val',macros.carbs+'g');}
-    var fr=document.getElementById('meal-fat-range');if(fr){fr.value=Math.min(100,macros.fat);setV('meal-fat-val',macros.fat+'g');}
-    var fbr=document.getElementById('meal-fiber-range');if(fbr){fbr.value=Math.min(40,macros.fiber);setV('meal-fiber-val',macros.fiber+'g');}
-    currentMeal={analysis:t||'',imgSrc:src,kcal:dk,macros:macros};
-  }catch(e){box.className='ai-box';box.textContent='Offline — maaltijd opgeslagen zonder analyse.';currentMeal={analysis:'',imgSrc:src,kcal:0,macros:{protein:0,carbs:0,fat:0,fiber:0}};}
+    currentMeal={analysis:omschrijving||raw,imgSrc:src,kcal:dk,macros:macros};
+  }catch(e){
+    box.className='ai-box';
+    box.textContent='❌ '+e.message+' — pas sliders handmatig aan.';
+    showMealProgress(-1);
+    currentMeal={analysis:'',imgSrc:src,kcal:0,macros:{protein:0,carbs:0,fat:0,fiber:0}};
+  }
 }
+
 function saveMeal(){
-  if(!currentMeal){toast('Fout: geen foto-analyse gevonden, wacht tot analyse klaar is');return;}
+  if(!currentMeal){toast('Wacht even — analyse nog bezig…');return;}
   var kcal=parseInt(document.getElementById('meal-kcal-range').value)||0;
   var notes=document.getElementById('meal-notes').value||'';
   var macros={
@@ -1382,8 +1407,18 @@ function saveMeal(){
     fiber:parseInt(document.getElementById('meal-fiber-range').value)||0
   };
   meals.push({time:new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}),imgSrc:currentMeal.imgSrc,analysis:currentMeal.analysis,kcal:kcal,type:currentMealType||'Maaltijd',notes:notes,macros:macros});
-  clearMeal();toast('Maaltijd opgeslagen ✓ ('+meals.length+' totaal vandaag)');autosave();
+  clearMeal();
+  var summary=kcal>0?kcal+' kcal'+(macros.protein?' · '+macros.protein+'g eiwit':''):'geen kcal-schatting';
+  toast('✓ Maaltijd opgeslagen — '+summary);
+  autosave();
   updateKcal(userWeight);
+  renderToday();
+  // Als gebruiker op Today tab is, scrollen naar maaltijden
+  var todayTab=document.getElementById('tab-today');
+  if(todayTab&&todayTab.classList.contains('active')){
+    var ml=document.getElementById('meals-list');
+    if(ml)ml.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
 }
 function clearMeal(){
   currentMeal=null;currentMealType=null;lastMealPhotoData=null;
@@ -1679,7 +1714,23 @@ function renderHRVBadge(row){
 
 function loadDraft(){
   var raw=localStorage.getItem('vt_draft_'+TODAY);
-  if(!raw)return;
+  if(!raw){
+    // Geen draft van vandaag — laad gisteren's gewicht als startpunt
+    var entries=getEntries();
+    if(entries.length>0){
+      var lastEntry=entries[0]; // meest recent
+      if(lastEntry.weight){
+        userWeight=parseFloat(lastEntry.weight);
+        var wRange=document.getElementById('weight-range');
+        var wVal=document.getElementById('weight-today-val');
+        var wTodayVal=document.getElementById('weight-val');
+        if(wRange){wRange.value=userWeight;}
+        // Laat label op '—' staan zodat de gebruiker weet dat het nog niet ingevuld is vandaag
+        if(wTodayVal)wTodayVal.textContent=userWeight+' kg';
+      }
+    }
+    return;
+  }
   try{
     var s=JSON.parse(raw);
     if(s.wake){
@@ -2847,8 +2898,8 @@ async function analyseSkin(b64,mt,box,src){
   }).filter(Boolean).join(' | ');
   var prompt='Je bent een huidspecialist. Analyseer dit gezicht:\n1) Wat zie je (roodheid, puistjes, droogheid, zwelling)\n2) Huidconditie: Goed/Matig/Aandacht nodig\n3) Recente signalen: '+skinHist+'\n4) Advies\nMax 4 zinnen, in het Nederlands.';
   try{
-    var resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
-    var d=await resp.json();var t=d.content&&d.content[0]&&d.content[0].text;
+    var resp=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({type:'analysePhoto',photoType:'skin',imageData:b64,mediaType:mt,prompt:prompt})});
+    var d=await resp.json();var t=d.analyse||d.answer||'';
     box.className='ai-box';box.textContent=t||'Opgeslagen.';
     currentSkinPhoto={analysis:t||'',imgSrc:src};
   }catch(e){box.className='ai-box';box.textContent='Offline.';currentSkinPhoto={analysis:'',imgSrc:src};}
