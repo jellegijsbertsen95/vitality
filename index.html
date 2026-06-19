@@ -1318,12 +1318,26 @@ function handlePhoto(e){
     var box=document.getElementById('aibox');
     box.className='ai-box loading';box.textContent='';
     showMealProgress(1);
-    var b64=url.split(',')[1];
-    var mt=f.type||'image/jpeg';
-    lastMealPhotoData={b64:b64,mt:mt,src:url};
-    var context=document.getElementById('meal-context')?document.getElementById('meal-context').value.trim():'';
-    showMealProgress(2);
-    analyseMeal(b64,mt,box,url,context);
+    // Verklein de afbeelding voor versturen (max 800px, kwaliteit 0.7)
+    var img=new Image();
+    img.onload=function(){
+      var maxSize=800;
+      var w=img.width,h=img.height;
+      if(w>maxSize||h>maxSize){
+        if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}
+        else{w=Math.round(w*maxSize/h);h=maxSize;}
+      }
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      var compressed=canvas.toDataURL('image/jpeg',0.7);
+      var b64=compressed.split(',')[1];
+      lastMealPhotoData={b64:b64,mt:'image/jpeg',src:url};
+      var context=document.getElementById('meal-context')?document.getElementById('meal-context').value.trim():'';
+      showMealProgress(2);
+      analyseMeal(b64,'image/jpeg',box,url,context);
+    };
+    img.src=url;
   };r.readAsDataURL(f);
 }
 function reanalyzeMeal(){
@@ -2887,7 +2901,22 @@ function handleSkinPhoto(e){
     document.getElementById('skin-uzone').style.display='none';
     var box=document.getElementById('skin-aibox');
     box.className='ai-box loading';box.textContent='Huid analyseren…';
-    analyseSkin(url.split(',')[1],f.type||'image/jpeg',box,url);
+    // Verklein voor versturen
+    var img=new Image();
+    img.onload=function(){
+      var maxSize=800;
+      var w=img.width,h=img.height;
+      if(w>maxSize||h>maxSize){
+        if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}
+        else{w=Math.round(w*maxSize/h);h=maxSize;}
+      }
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      var compressed=canvas.toDataURL('image/jpeg',0.7);
+      analyseSkin(compressed.split(',')[1],'image/jpeg',box,url);
+    };
+    img.src=url;
   };r.readAsDataURL(f);
 }
 async function analyseSkin(b64,mt,box,src){
