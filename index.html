@@ -1337,9 +1337,11 @@ function reanalyzeMeal(){
 async function analyseMeal(b64,mt,box,src,context){
   try{
     var basePrompt='Je bent een voedingsdeskundige die iemand helpt energie, stemming, spijsvertering en huid te optimaliseren. Analyseer deze maaltijdfoto en geef:\n1) Wat je ziet\n2) Geschatte kcal (schrijf exact: "Kcal: [getal]")\n3) Macro schatting (schrijf exact in dit formaat: "Macros: eiwit=[getal]g, koolhydraten=[getal]g, vet=[getal]g, vezels=[getal]g")\n4) Energieniveau effect in 2-3 uur\n5) Mogelijke spijsvertering/huid aandachtspunten\n6) Één praktische tip\nWarm, beknopt, max 6 zinnen.';
-    if(context){basePrompt+='\n\nBELANGRIJKE CONTEXT VAN GEBRUIKER: "'+context+'"';}
-    var r=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({type:'analysePhoto',photoType:'meal',imageData:b64,mediaType:mt,prompt:basePrompt})});
-    var d=await r.json();var t=d.analyse||d.answer||'';
+    if(context){
+      basePrompt+='\n\nBELANGRIJKE CONTEXT VAN GEBRUIKER (gebruik dit voor een nauwkeurigere schatting, bijv. voor portiegrootte of bereidingswijze die niet zichtbaar is op de foto): "'+context+'"';
+    }
+    var r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:basePrompt}]}]})});
+    var d=await r.json();var t=d.content&&d.content[0]&&d.content[0].text;
     box.className='ai-box';box.textContent=t||'Opgeslagen.';
     showMealProgress(-1);
     var reBtn=document.getElementById('reanalyze-btn');
@@ -2845,8 +2847,8 @@ async function analyseSkin(b64,mt,box,src){
   }).filter(Boolean).join(' | ');
   var prompt='Je bent een huidspecialist. Analyseer dit gezicht:\n1) Wat zie je (roodheid, puistjes, droogheid, zwelling)\n2) Huidconditie: Goed/Matig/Aandacht nodig\n3) Recente signalen: '+skinHist+'\n4) Advies\nMax 4 zinnen, in het Nederlands.';
   try{
-    var resp=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({type:'analysePhoto',photoType:'skin',imageData:b64,mediaType:mt,prompt:prompt})});
-    var d=await resp.json();var t=d.analyse||d.answer||'';
+    var resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:b64}},{type:'text',text:prompt}]}]})});
+    var d=await resp.json();var t=d.content&&d.content[0]&&d.content[0].text;
     box.className='ai-box';box.textContent=t||'Opgeslagen.';
     currentSkinPhoto={analysis:t||'',imgSrc:src};
   }catch(e){box.className='ai-box';box.textContent='Offline.';currentSkinPhoto={analysis:'',imgSrc:src};}
