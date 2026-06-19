@@ -1427,19 +1427,33 @@ function saveMeal(){
     fat:parseInt(document.getElementById('meal-fat-range').value)||0,
     fiber:parseInt(document.getElementById('meal-fiber-range').value)||0
   };
-  meals.push({time:new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}),imgSrc:currentMeal.imgSrc,analysis:currentMeal.analysis,kcal:kcal,type:currentMealType||'Maaltijd',notes:notes,macros:macros});
+  // Sla thumbnail op (klein) in plaats van volledige foto voor localStorage
+  var thumbSrc=currentMeal.imgSrc;
+  if(thumbSrc&&thumbSrc.length>50000){
+    try{
+      var tCanvas=document.createElement('canvas');
+      var tImg=new Image();
+      tImg.src=thumbSrc;
+      tCanvas.width=120;tCanvas.height=120;
+      tCanvas.getContext('2d').drawImage(tImg,0,0,120,120);
+      thumbSrc=tCanvas.toDataURL('image/jpeg',0.6);
+    }catch(te){thumbSrc='';}
+  }
+  meals.push({time:new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}),imgSrc:thumbSrc,analysis:currentMeal.analysis,kcal:kcal,type:currentMealType||'Maaltijd',notes:notes,macros:macros});
   clearMeal();
   var summary=kcal>0?kcal+' kcal'+(macros.protein?' · '+macros.protein+'g eiwit':''):'geen kcal-schatting';
-  toast('✓ Maaltijd opgeslagen — '+summary);
   autosave();
   updateKcal(userWeight);
   renderToday();
-  // Als gebruiker op Today tab is, scrollen naar maaltijden
-  var todayTab=document.getElementById('tab-today');
-  if(todayTab&&todayTab.classList.contains('active')){
+  // Navigeer naar Today tab zodat maaltijd zichtbaar is
+  var todayBtn=document.querySelector('.nav-btn[onclick*="today"]');
+  if(todayBtn)switchTab('today',todayBtn);
+  toast('✓ Maaltijd opgeslagen — '+summary);
+  // Scroll naar maaltijden
+  setTimeout(function(){
     var ml=document.getElementById('meals-list');
-    if(ml)ml.scrollIntoView({behavior:'smooth',block:'nearest'});
-  }
+    if(ml)ml.scrollIntoView({behavior:'smooth',block:'start'});
+  },100);
 }
 function clearMeal(){
   currentMeal=null;currentMealType=null;lastMealPhotoData=null;
@@ -1929,8 +1943,18 @@ function renderToday(){
   var s=getFormState();
   var totalKcalEaten=meals.reduce(function(sum,m){return sum+(m.kcal||0);},0);
   updateKcal(userWeight);
+  updateNutritionPanel();
   var ml=document.getElementById('meals-list');
-  ml.innerHTML=meals.length?meals.map(m=>'<div class="log-entry"><div class="log-thumb">'+(m.imgSrc?'<img src="'+m.imgSrc+'" alt="meal">':'🥗')+'</div><div class="log-info"><div class="log-time">'+m.time+'</div><div class="log-text">'+(m.analysis?m.analysis.substring(0,100)+'…':'Foto opgeslagen')+'</div></div></div>').join(''):'<div class="empty" style="padding:14px"><div class="empty-ico">📷</div><div style="font-size:13px;color:var(--ink2)">Nog geen maaltijden</div></div>';
+  ml.innerHTML=meals.length?meals.map(function(m){
+    var thumb=m.imgSrc?'<img src="'+m.imgSrc+'" alt="meal" style="width:100%;height:100%;object-fit:cover">':'🥗';
+    var meta='';
+    if(m.kcal>0)meta+='<span class="tag t-amber">'+m.kcal+' kcal</span>';
+    if(m.macros&&m.macros.protein>0)meta+='<span class="tag t-moss">🥩 '+m.macros.protein+'g</span>';
+    if(m.macros&&m.macros.carbs>0)meta+='<span class="tag t-sky">🍞 '+m.macros.carbs+'g</span>';
+    if(m.macros&&m.macros.fat>0)meta+='<span class="tag t-amber">🧈 '+m.macros.fat+'g</span>';
+    var desc=m.analysis?m.analysis.substring(0,80)+'…':'Opgeslagen';
+    return'<div class="log-entry"><div class="log-thumb">'+thumb+'</div><div class="log-info"><div class="log-time">'+m.time+(m.type?' · '+m.type:'')+'</div><div style="margin:3px 0">'+meta+'</div><div class="log-text">'+desc+'</div></div></div>';
+  }).join(''):'<div class="empty" style="padding:14px"><div class="empty-ico">📷</div><div style="font-size:13px;color:var(--ink2)">Nog geen maaltijden</div></div>';
   var tw=workouts.filter(w=>w.date===TODAY);
   document.getElementById('workouts-today').innerHTML=tw.length?tw.map(function(w,i){
     var realIdx=workouts.indexOf(w);
