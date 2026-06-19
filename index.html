@@ -1354,7 +1354,14 @@ async function analyseMeal(b64,mt,box,src,context){
     var r=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({type:'analysePhoto',photoType:'meal',imageData:b64,mediaType:mt,prompt:prompt})});
     var d=await r.json();
     var raw=d.analyse||d.answer||d.text||'';
-    if(!raw){throw new Error('Geen response ontvangen');}
+    // Debug: toon altijd wat de server teruggeeft
+    if(!raw){
+      box.className='ai-box';
+      box.textContent='Server response: '+JSON.stringify(d).substring(0,300);
+      showMealProgress(-1);
+      currentMeal={analysis:'',imgSrc:src,kcal:0,macros:{protein:0,carbs:0,fat:0,fiber:0}};
+      return;
+    }
 
     // Parse JSON response
     var parsed=null,dk=0,macros={protein:0,carbs:0,fat:0,fiber:0},omschrijving='';
