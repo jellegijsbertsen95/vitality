@@ -862,6 +862,9 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
     <div id="edit-chips-other" class="chips"></div>
     <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:18px 0 8px">📝 Notitie</div>
     <textarea id="edit-daily-note" style="width:100%;border:1px solid var(--paper3);border-radius:var(--r-sm);padding:10px 12px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--paper);resize:none;height:70px;outline:none;line-height:1.5"></textarea>
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:18px 0 8px">🍽️ Maaltijden</div>
+    <div id="edit-meals-list" style="margin-bottom:8px"></div>
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Tik op een maaltijd om kcal/macros aan te passen of te verwijderen</div>
     <div style="display:flex;gap:8px;margin-top:20px;position:sticky;bottom:0;background:var(--white);padding-top:10px">
       <button class="btn" style="flex:1" onclick="closeEditModal()">Annuleren</button>
       <button class="btn btn-moss" style="flex:1" onclick="saveEditedDay()">Opslaan ↗</button>
@@ -933,6 +936,7 @@ window.addEventListener('DOMContentLoaded',function(){
   updateChatPreview();
   updateCompleteness();
   initCollapsibleCards();
+  laadProfielSheet(); // laad persoonlijk profiel uit Google Sheets
   var activeTab=document.querySelector('.tab-section.active');
   if(activeTab&&activeTab.id==='tab-today')renderToday();
 });
@@ -1969,6 +1973,15 @@ function renderToday(){
 function getEntries(){return JSON.parse(localStorage.getItem('vt_entries')||'[]');}
 // ── Inzicht Profiel ──
 var cachedProfiel = null;
+var cachedProfielSheet = ''; // Handmatig ingevuld profiel uit Google Sheets
+
+async function laadProfielSheet(){
+  try{
+    var r=await fetch(SCRIPT_URL+'?action=getProfielSheet');
+    var d=await r.json();
+    cachedProfielSheet=d.profiel||'';
+  }catch(e){ cachedProfielSheet=''; }
+}
 var profielVolledig = false;
 
 function renderInsightsData(){
@@ -2767,12 +2780,15 @@ async function runAI(question){
     totaal_dagen_gelogd:allEntries.length,
     vandaag:TODAY,
     gewicht_trend:JSON.parse(localStorage.getItem('vt_weights')||'[]'),
-    recent_gesprek:chatHistory.slice(-6).map(function(m){return(m.role==='user'?'Vraag: ':'Antwoord: ')+m.text.substring(0,200);})
+    recent_gesprek:chatHistory.slice(-6).map(function(m){return(m.role==='user'?'Vraag: ':'Antwoord: ')+m.text.substring(0,200);}),
+    inzicht_profiel:cachedProfiel||'Nog niet gegenereerd.',
+    persoonlijk_profiel_sheet:cachedProfielSheet||'Niet geladen.'
   });
   try{
     var url=SCRIPT_URL+'?action=askAI';
     url+='&question='+encodeURIComponent(question);
     url+='&ctx='+encodeURIComponent(ctx);
+    url+='&profiel='+encodeURIComponent(cachedProfielSheet||'');
     var r=await fetch(url);
     var d=await r.json();
     removeChatLoading(loadingId);
@@ -2855,6 +2871,52 @@ function openEditModal(date){
   });
   document.getElementById('edit-modal').style.display='flex';
   document.getElementById('edit-modal').scrollTop=0;
+  // Laad maaltijden van deze dag
+  renderEditMeals(date);
+}
+var editMeals=[];
+function renderEditMeals(date){
+  var allEntries=getEntries();
+  var entry=allEntries.find(function(x){return x.date===date;});
+  editMeals=(entry&&entry.meals)?JSON.parse(JSON.stringify(entry.meals)):[];
+  var container=document.getElementById('edit-meals-list');
+  if(!container)return;
+  if(!editMeals.length){
+    container.innerHTML='<div style="font-size:13px;color:var(--ink3);padding:8px 0">Geen maaltijden gelogd op deze dag</div>';
+    return;
+  }
+  container.innerHTML=editMeals.map(function(m,i){
+    var thumb=m.imgSrc?'<img src="'+m.imgSrc+'" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0">':'<div style="width:40px;height:40px;background:var(--paper2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🥗</div>';
+    return '<div style="border:1px solid var(--paper3);border-radius:var(--r-sm);padding:10px;margin-bottom:8px;background:var(--paper)">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      +thumb
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+m.time+' · '+(m.type||'Maaltijd')+'</div>'
+      +'<div style="font-size:12px;color:var(--ink2);margin-top:2px">'+(m.kcal||0)+' kcal · '+(m.macros?m.macros.protein||0:0)+'g eiwit</div></div>'
+      +'<button onclick="removeEditMeal('+i+')" style="background:var(--coral2);border:none;border-radius:var(--r-sm);padding:4px 10px;font-size:12px;color:var(--coral);cursor:pointer;font-family:inherit">✕</button>'
+      +'</div>'
+      +'<div class="rrow" style="margin-bottom:8px"><div class="rlbl"><span>Kcal</span><span class="rval" id="em-kcal-val-'+i+'">'+(m.kcal||0)+' kcal</span></div>'
+      +'<input type="range" min="0" max="1500" step="25" value="'+(m.kcal||0)+'" oninput="updateEditMeal('+i+',\'kcal\',parseInt(this.value));setV(\'em-kcal-val-'+i+'\',this.value+\' kcal\')"></div>'
+      +'<div class="rrow" style="margin-bottom:8px"><div class="rlbl"><span>🥩 Eiwit</span><span class="rval" id="em-p-val-'+i+'">'+(m.macros?m.macros.protein||0:0)+'g</span></div>'
+      +'<input type="range" min="0" max="150" step="1" value="'+(m.macros?m.macros.protein||0:0)+'" oninput="updateEditMealMacro('+i+',\'protein\',parseInt(this.value));setV(\'em-p-val-'+i+'\',this.value+\'g\')"></div>'
+      +'<div class="rrow" style="margin-bottom:8px"><div class="rlbl"><span>🍞 Koolhydraten</span><span class="rval" id="em-c-val-'+i+'">'+(m.macros?m.macros.carbs||0:0)+'g</span></div>'
+      +'<input type="range" min="0" max="200" step="1" value="'+(m.macros?m.macros.carbs||0:0)+'" oninput="updateEditMealMacro('+i+',\'carbs\',parseInt(this.value));setV(\'em-c-val-'+i+'\',this.value+\'g\')"></div>'
+      +'<div class="rrow" style="margin-bottom:0"><div class="rlbl"><span>🧈 Vet</span><span class="rval" id="em-f-val-'+i+'">'+(m.macros?m.macros.fat||0:0)+'g</span></div>'
+      +'<input type="range" min="0" max="100" step="1" value="'+(m.macros?m.macros.fat||0:0)+'" oninput="updateEditMealMacro('+i+',\'fat\',parseInt(this.value));setV(\'em-f-val-'+i+'\',this.value+\'g\')"></div>'
+      +'</div>';
+  }).join('');
+}
+function updateEditMeal(i,key,val){
+  if(editMeals[i])editMeals[i][key]=val;
+}
+function updateEditMealMacro(i,key,val){
+  if(editMeals[i]){
+    if(!editMeals[i].macros)editMeals[i].macros={protein:0,carbs:0,fat:0,fiber:0};
+    editMeals[i].macros[key]=val;
+  }
+}
+function removeEditMeal(i){
+  editMeals.splice(i,1);
+  renderEditMeals(editingDate);
 }
 function selectEditWake(btn){
   document.querySelectorAll('#edit-wake-row .chip').forEach(function(b){b.classList.remove('on');});
@@ -2895,6 +2957,7 @@ function saveEditedDay(){
   entries[idx].alc_cocktail=editAlc.cocktail;
   entries[idx].daily_note=document.getElementById('edit-daily-note').value;
   entries[idx].chips=allChips;
+  entries[idx].meals=editMeals; // sla bewerkte maaltijden op
   localStorage.setItem('vt_entries',JSON.stringify(entries));
   toast('Dag bijgewerkt ✓ · syncen naar Sheets…');
   syncToSheets(entries[idx]);
