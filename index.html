@@ -713,6 +713,14 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
 
 <!-- ═══ INSIGHTS TAB ═══ -->
 <div id="tab-insights" class="tab-section">
+  <div class="card" id="weekoverzicht-card" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">📊 Laatste weekoverzicht</h2>
+      <button class="btn" style="font-size:11px;padding:5px 10px" onclick="laadWeekOverzicht()">🔄 Vernieuwen</button>
+    </div>
+    <div id="weekoverzicht-datum" style="font-size:11px;color:var(--ink3);margin-bottom:8px"></div>
+    <div id="weekoverzicht-tekst" style="font-size:13px;color:var(--ink2);line-height:1.7;white-space:pre-wrap"></div>
+  </div>
   <div class="ai-panel" style="cursor:pointer" onclick="openChatScreen()">
     <h2>🤖 AI Coach</h2>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -777,6 +785,14 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
     <div style="font-size:14px;font-weight:500">Alle logs</div>
     <button class="btn" style="font-size:12px;padding:5px 11px;color:var(--coral);border-color:var(--coral)" onclick="clearAll()">Alles wissen</button>
   </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="chip on" onclick="filterHistory('all',this)">Alles</button>
+    <button class="chip" onclick="filterHistory('week',this)">Deze week</button>
+    <button class="chip" onclick="filterHistory('month',this)">Deze maand</button>
+    <button class="chip" onclick="filterHistory('3month',this)">3 maanden</button>
+    <input type="month" id="history-month-pick" onchange="filterHistoryMonth(this.value)"
+      style="border:1px solid var(--paper3);border-radius:var(--r-pill);padding:5px 12px;font-size:12px;font-family:inherit;color:var(--ink);background:var(--paper);outline:none">
+  </div>
   <div id="history-list"></div>
 </div>
 
@@ -812,6 +828,9 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
       <button class="chip" onclick="mchip(this,'sore')">Borst</button>
       <button class="chip" onclick="mchip(this,'sore')">Heel lichaam</button>
     </div>
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px">📝 Notitie</div>
+    <textarea id="modal-wo-notes" placeholder="bijv. 'PR op deadlift', 'voelde zwaar', 'goede techniek'..."
+      style="width:100%;border:1px solid var(--paper3);border-radius:var(--r-sm);padding:10px 12px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--paper);resize:none;height:60px;outline:none;line-height:1.5;margin-bottom:16px"></textarea>
     <div style="display:flex;gap:8px">
       <button class="btn" style="flex:1" onclick="closeModal()">Overslaan</button>
       <button class="btn btn-moss" style="flex:1" onclick="saveModalFeedback()">Opslaan</button>
@@ -896,21 +915,7 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
     <button class="chat-clear-btn" onclick="clearChatHistory()">Wis gesprek</button>
   </div>
   <div class="chat-body" id="chat-body"></div>
-  <div class="chat-quick-row" id="chat-quick-row">
-    <button class="chat-quick-btn" onclick="quickAsk('WORKOUT_ADVIES')">💪 Workout advies</button>
-    <button class="chat-quick-btn" onclick="quickAsk('KCAL_VANDAAG')">🔥 Kcal vandaag</button>
-    <button class="chat-quick-btn" onclick="quickAsk('VOEDINGSPATRONEN')">🥗 Voedingspatronen</button>
-    <button class="chat-quick-btn" onclick="quickAsk('VOEDING_ADVIES')">🌾 Voeding &amp; timing</button>
-    <button class="chat-quick-btn" onclick="quickAsk('MAG_IK_TRAINEN')">🏋 Mag ik trainen?</button>
-    <button class="chat-quick-btn" onclick="quickAsk('PUISTJES_TRIGGER')">🧐 Huidscan</button>
-    <button class="chat-quick-btn" onclick="quickAsk('PRE_CROSSFIT')">⚡ Pre-CrossFit eten</button>
-    <button class="chat-quick-btn" onclick="quickAsk('PRE_PADEL')">🎾 Pre-Padel eten</button>
-    <button class="chat-quick-btn" onclick="quickAsk('SLAAP_SLECHT')">😴 Waarom slechte nacht?</button>
-    <button class="chat-quick-btn" onclick="quickAsk('ENERGIE_VOORSPELLING')">🔮 Energie vandaag</button>
-    <button class="chat-quick-btn" onclick="quickAsk('BESTE_TIJDSTIP')">⏰ Beste tijdstip sporten</button>
-    <button class="chat-quick-btn" onclick="quickAsk('GOEDE_DAG_FORMULE')">✨ Goede dag benodigdheden</button>
-    <button class="chat-quick-btn" onclick="testConnection()" style="border-color:#FCD34D;color:var(--amber)">🔧 Test verbinding</button>
-  </div>
+  <div class="chat-quick-row" id="chat-quick-row"></div>
   <div class="chat-input-row">
     <input class="chat-input" id="chat-input" placeholder="Stel een vraag…" onkeydown="if(event.key==='Enter')sendChatMessage()">
     <button class="chat-send-btn" onclick="sendChatMessage()" aria-label="Verstuur">↗</button>
@@ -1509,6 +1514,12 @@ function openWorkoutModal(idx){
   var wo=workouts[idx];
   document.getElementById('modal-wo-title').textContent=woIco(wo.type)+' '+wo.type+' — '+wo.duration+' min';
   document.querySelectorAll('#wo-modal .chip').forEach(c=>c.classList.remove('on'));
+  // Herstel bestaande waarden
+  if(wo.feeling){var fc=Array.from(document.querySelectorAll('#modal-feeling .chip')).find(c=>c.textContent.trim()===wo.feeling);if(fc){fc.classList.add('on');modalData.feeling=wo.feeling;}}
+  if(wo.postFatigue){var ftc=Array.from(document.querySelectorAll('#modal-fatigue .chip')).find(c=>c.textContent.trim()===wo.postFatigue);if(ftc){ftc.classList.add('on');modalData.fatigue=wo.postFatigue;}}
+  if(wo.postSore&&wo.postSore.length){wo.postSore.forEach(function(s){var sc=Array.from(document.querySelectorAll('#modal-sore .chip')).find(c=>c.textContent.trim()===s);if(sc)sc.classList.add('on');});modalData.sore=wo.postSore||[];}
+  var notesEl=document.getElementById('modal-wo-notes');
+  if(notesEl)notesEl.value=wo.notes||'';
   document.getElementById('wo-modal').style.display='flex';
 }
 function closeModal(){document.getElementById('wo-modal').style.display='none';}
@@ -1527,10 +1538,15 @@ function saveModalFeedback(){
     workouts[pendingModalWorkoutIdx].feeling=modalData.feeling;
     workouts[pendingModalWorkoutIdx].postFatigue=modalData.fatigue;
     workouts[pendingModalWorkoutIdx].postSore=modalData.sore;
+    var notesEl=document.getElementById('modal-wo-notes');
+    if(notesEl&&notesEl.value.trim()){
+      workouts[pendingModalWorkoutIdx].notes=notesEl.value.trim();
+    }
     localStorage.setItem('vt_workouts',JSON.stringify(workouts));
     renderImportedWorkouts();
+    renderToday();
   }
-  closeModal();toast('Workout feedback opgeslagen ✓');autosave();
+  closeModal();toast('Workout opgeslagen ✓');autosave();
 }
 
 // ── Chips ──
@@ -1954,13 +1970,69 @@ function switchTab(name,btn){
   document.querySelectorAll('.tab-section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');btn.classList.add('active');
   document.getElementById('save-bar').style.display=name==='log'||name==='today'?'flex':'none';
-  if(name==='today')renderToday();
+  if(name==='today'){renderToday();fetchTodayWorkoutsFromSheet().then(function(){renderToday();});}
   if(name==='insights')renderInsightsData();
   if(name==='history')renderHistory();
   if(name==='health')renderImportedWorkouts();
 }
 
 // ── Today tab ──
+// ── Workouts vandaag ophalen uit Sheet (Optie C) ──
+var lastSheetWorkoutFetch=0;
+async function fetchTodayWorkoutsFromSheet(){
+  // Max 1x per 15 minuten ophalen
+  var now=Date.now();
+  if(now-lastSheetWorkoutFetch < 15*60*1000 && lastSheetWorkoutFetch>0)return;
+  lastSheetWorkoutFetch=now;
+  var woEl=document.getElementById('workouts-today');
+  if(woEl){
+    var syncBadge=document.getElementById('wo-sync-badge');
+    if(!syncBadge){
+      syncBadge=document.createElement('div');
+      syncBadge.id='wo-sync-badge';
+      syncBadge.style.cssText='font-size:11px;color:var(--ink3);margin-bottom:6px';
+      woEl.parentNode.insertBefore(syncBadge,woEl);
+    }
+    syncBadge.textContent='⏳ Workouts ophalen uit Apple Health…';
+  }
+  try{
+    var r=await fetch(SCRIPT_URL+'?action=getTodayWorkouts&date='+TODAY);
+    var d=await r.json();
+    if(d.workouts&&d.workouts.length){
+      // Merge: behoud handmatige workouts, voeg Sheet workouts toe zonder duplicaten
+      var manual=workouts.filter(function(w){return w.source!=='apple'&&w.date===TODAY;});
+      var otherDays=workouts.filter(function(w){return w.date!==TODAY;});
+      // Dedupliceer op type + datum + duur (±5 min)
+      var sheetWos=d.workouts.map(function(w){
+        return{
+          type:w.type||'Workout',
+          duration:parseInt(w.duration)||0,
+          kcal:parseInt(w.kcal)||0,
+          date:TODAY,
+          source:'apple',
+          location:w.location||'',
+          notes:w.notes||''
+        };
+      });
+      // Verwijder handmatige die ook in Sheet staan (zelfde type + duur ±10min)
+      var deduped=manual.filter(function(m){
+        return !sheetWos.some(function(s){
+          return s.type===m.type&&Math.abs(s.duration-m.duration)<=10;
+        });
+      });
+      workouts=otherDays.concat(deduped).concat(sheetWos);
+      localStorage.setItem('vt_workouts',JSON.stringify(workouts));
+      invalidateMacroTargetsCache();
+      updateKcal(userWeight);
+    }
+    var badge=document.getElementById('wo-sync-badge');
+    if(badge)badge.textContent='✓ Gesynchroniseerd met Apple Health · '+new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  }catch(err){
+    var badge=document.getElementById('wo-sync-badge');
+    if(badge)badge.textContent='';
+  }
+}
+
 function renderToday(){
   setV('weight-val',userWeight+' kg');
   var s=getFormState();
@@ -1982,7 +2054,7 @@ function renderToday(){
   document.getElementById('workouts-today').innerHTML=tw.length?tw.map(function(w,i){
     var realIdx=workouts.indexOf(w);
     var fb=w.feeling?'<span class="tag t-moss" style="margin-top:4px">'+w.feeling+'</span>':'<button class="btn" style="font-size:11px;padding:4px 10px;margin-top:6px" onclick="openWorkoutModal('+realIdx+')">+ Hoe voelde dit?</button>';
-    return'<div class="workout-row"><div class="workout-ico">'+woIco(w.type)+'</div><div class="workout-info"><div class="workout-name">'+w.type+(w.location?' <span style="font-size:11px;color:var(--ink3)">'+({'Binnen':'🏢','Buiten':'🌳'}[w.location]||'')+' '+w.location+'</span>':'')+'</div><div class="workout-meta">'+w.duration+' min'+(w.kcal?' · '+w.kcal+' kcal':'')+'</div><div>'+fb+'</div></div><div class="workout-kcal">'+w.kcal+' kcal</div></div>';
+    return'<div class="workout-row"><div class="workout-ico">'+woIco(w.type)+'</div><div class="workout-info"><div class="workout-name">'+w.type+(w.location?' <span style="font-size:11px;color:var(--ink3)">'+({'Binnen':'🏢','Buiten':'🌳'}[w.location]||'')+' '+w.location+'</span>':'')+'</div><div class="workout-meta">'+w.duration+' min'+(w.kcal?' · '+w.kcal+' kcal':'')+'</div>'+(w.notes?'<div style="font-size:12px;color:var(--ink2);margin-top:3px;font-style:italic">📝 '+w.notes+'</div>':'')+'<div>'+fb+'</div></div><div class="workout-kcal">'+w.kcal+' kcal</div></div>';
   }).join(''):'<div style="font-size:13px;color:var(--ink2);padding:8px 0">Geen workouts vandaag.</div>';
   var chips=s.chips;var se=document.getElementById('sigs-today');
   se.innerHTML=chips&&chips.length?chips.map(c=>'<span class="tag t-amber">'+c+'</span>').join(' '):'<span style="font-size:13px;color:var(--ink2)">Niets gemarkeerd vandaag</span>';
@@ -2021,6 +2093,75 @@ function renderInsightsData(){
   var e=getEntries();
   renderWeekChart(e);renderWorkoutChart();renderPatterns(e);renderWeeklySummary(e);
   laadInzichtProfiel();
+  laadWeekOverzicht();
+}
+
+// ── Weekoverzicht (aanbeveling 5) ──
+async function laadWeekOverzicht(){
+  var card=document.getElementById('weekoverzicht-card');
+  var tekst=document.getElementById('weekoverzicht-tekst');
+  var datum=document.getElementById('weekoverzicht-datum');
+  if(!card||!tekst)return;
+  // Check localStorage voor gecachede versie
+  var cached=localStorage.getItem('vt_weekoverzicht');
+  if(cached){
+    try{
+      var obj=JSON.parse(cached);
+      card.style.display='block';
+      datum.textContent='Gegenereerd op '+obj.ts;
+      tekst.textContent=obj.tekst;
+      return;
+    }catch(e){}
+  }
+  // Haal op via Apps Script
+  try{
+    var r=await fetch(SCRIPT_URL+'?action=getWeekOverzicht');
+    var d=await r.json();
+    if(d.tekst){
+      card.style.display='block';
+      datum.textContent='Gegenereerd op '+d.ts;
+      tekst.textContent=d.tekst;
+      localStorage.setItem('vt_weekoverzicht',JSON.stringify({tekst:d.tekst,ts:d.ts}));
+    }
+  }catch(e){}
+}
+
+// ── History filter (aanbeveling 9) ──
+var historyFilter='all';
+function filterHistory(period, btn){
+  historyFilter=period;
+  document.querySelectorAll('#tab-history .chip').forEach(function(b){b.classList.remove('on');});
+  if(btn)btn.classList.add('on');
+  var monthPick=document.getElementById('history-month-pick');
+  if(monthPick)monthPick.value='';
+  renderHistory();
+}
+function filterHistoryMonth(val){
+  historyFilter='month:'+val;
+  document.querySelectorAll('#tab-history .chip').forEach(function(b){b.classList.remove('on');});
+  renderHistory();
+}
+function entryMatchesFilter(e){
+  if(historyFilter==='all')return true;
+  var d=new Date(e.date);
+  var now=new Date();
+  if(historyFilter==='week'){
+    var weekAgo=new Date();weekAgo.setDate(weekAgo.getDate()-7);
+    return d>=weekAgo;
+  }
+  if(historyFilter==='month'){
+    var monthAgo=new Date();monthAgo.setDate(monthAgo.getDate()-30);
+    return d>=monthAgo;
+  }
+  if(historyFilter==='3month'){
+    var threeMonthAgo=new Date();threeMonthAgo.setDate(threeMonthAgo.getDate()-90);
+    return d>=threeMonthAgo;
+  }
+  if(historyFilter.startsWith('month:')){
+    var ym=historyFilter.replace('month:','');
+    return e.date.startsWith(ym);
+  }
+  return true;
 }
 
 async function laadInzichtProfiel(){
@@ -2589,10 +2730,84 @@ var chatHistory=JSON.parse(localStorage.getItem('vt_chat_history')||'[]');
 function openChatScreen(){
   document.getElementById('chat-screen').classList.add('open');
   renderChatBody();
+  renderQuickButtons();
+  if(!chatHistory.length)showWelcomeMessage();
   setTimeout(function(){
     var body=document.getElementById('chat-body');
     if(body)body.scrollTop=body.scrollHeight;
   },50);
+}
+function renderQuickButtons(){
+  var row=document.getElementById('chat-quick-row');
+  if(!row)return;
+  var hour=new Date().getHours();
+  var todayWo=workouts.filter(function(w){return w.date===TODAY;});
+  var hasMeals=meals.length>0;
+  var lastSleep=getFormState().sleep;
+  var sleepNum=parseFloat((lastSleep||'7').replace('u',''));
+  var btns=[];
+  // Contextbewuste knoppen bovenaan op basis van tijd/data
+  if(hour>=5&&hour<10){
+    btns.push({ico:'🔮',lbl:'Energie vandaag',key:'ENERGIE_VOORSPELLING'});
+    btns.push({ico:'☀️',lbl:'Goedemorgen check',key:'OCHTEND_CHECK'});
+  }
+  if(hour>=10&&hour<14){
+    btns.push({ico:'🥗',lbl:'Wat eten nu?',key:'WAT_ETEN_NU'});
+    btns.push({ico:'⚡',lbl:'Pre-CrossFit',key:'PRE_CROSSFIT'});
+  }
+  if(hour>=17&&hour<22){
+    btns.push({ico:'🌙',lbl:'Avond check',key:'AVOND_CHECK'});
+    if(hasMeals)btns.push({ico:'🍽️',lbl:'Macro check',key:'MACRO_CHECK'});
+  }
+  if(sleepNum<6.5)btns.push({ico:'😴',lbl:'Waarom slechte nacht?',key:'SLAAP_SLECHT'});
+  if(todayWo.length>0)btns.push({ico:'💪',lbl:'Hersteladvies',key:'HERSTEL_ADVIES'});
+  else btns.push({ico:'🏋',lbl:'Mag ik trainen?',key:'MAG_IK_TRAINEN'});
+  // Altijd beschikbaar
+  btns.push({ico:'🔥',lbl:'Kcal vandaag',key:'KCAL_VANDAAG'});
+  btns.push({ico:'🥗',lbl:'Voedingspatronen',key:'VOEDINGSPATRONEN'});
+  btns.push({ico:'🧐',lbl:'Huidscan',key:'PUISTJES_TRIGGER'});
+  btns.push({ico:'🎾',lbl:'Pre-Padel',key:'PRE_PADEL'});
+  btns.push({ico:'🌾',lbl:'Voeding & timing',key:'VOEDING_ADVIES'});
+  btns.push({ico:'⏰',lbl:'Beste tijdstip',key:'BESTE_TIJDSTIP'});
+  btns.push({ico:'✨',lbl:'Goede dag formule',key:'GOEDE_DAG_FORMULE'});
+  btns.push({ico:'🔧',lbl:'Test verbinding',key:'TEST',style:'border-color:#FCD34D;color:var(--amber)'});
+  var html='';
+  btns.forEach(function(b){
+    var style=b.style?' style="'+b.style+'"':'';
+    html+='<button class="chat-quick-btn"'+style+' onclick="quickAsk(this.dataset.key)" data-key="'+b.key+'">'+b.ico+' '+b.lbl+'</button>';
+  });
+  row.innerHTML=html;
+}
+function showWelcomeMessage(){
+  var hour=new Date().getHours();
+  var greeting=hour<12?'Goedemorgen':hour<17?'Goedemiddag':'Goedenavond';
+  var s=getFormState();
+  var parts=[];
+  // Haal relevante data op
+  var entries=getEntries();
+  var gisteren=entries.length>1?entries[1]:null;
+  var todayWo=workouts.filter(function(w){return w.date===TODAY;});
+  var sleepNum=parseFloat((s.sleep||'0').replace('u',''));
+  if(sleepNum>0&&sleepNum<6.5)parts.push('je hebt '+sleepNum+'u geslapen — dat is kort voor jou');
+  else if(sleepNum>=8)parts.push('goed geslapen ('+sleepNum+'u)');
+  if(todayWo.length>0)parts.push('je hebt vandaag al '+todayWo[0].type+' gedaan');
+  if(meals.length>0)parts.push(''+meals.length+' maaltijd'+(meals.length>1?'en':'')+ ' gelogd');
+  if(s.energy)parts.push('energie '+s.energy+'/10');
+  var msg=greeting+'! ';
+  if(parts.length>0){
+    msg+=parts.slice(0,2).join(' en ')+'. ';
+  }
+  msg+='Waarmee kan ik je helpen?';
+  // Toon als AI bericht zonder het op te slaan in history
+  var body=document.getElementById('chat-body');
+  if(body){
+    var div=document.createElement('div');
+    div.className='chat-msg ai';
+    div.innerHTML=formatAIResponse(msg);
+    div.setAttribute('data-welcome','1');
+    body.appendChild(div);
+    body.scrollTop=body.scrollHeight;
+  }
 }
 function closeChatScreen(){
   document.getElementById('chat-screen').classList.remove('open');
@@ -2752,19 +2967,25 @@ async function sendChatMessage(){
 }
 async function askAI(){await sendChatMessage();}
 function quickAsk(q){
+  if(q==='TEST'){testConnection();return;}
   var prompts={
-    'WORKOUT_ADVIES':'Analyseer mijn recente workouts en hersteldata. Geef gestructureerd advies in dit formaat:\n\n💪 WORKOUT STATUS\n• [huidige belasting beoordeling]\n\n📈 AANBEVELING\n• [wat ik deze week moet doen]\n• [intensiteit advies]\n• [rust advies]\n\n⚠ AANDACHTSPUNTEN\n• [eventuele waarschuwingen op basis van data]',
-    'KCAL_VANDAAG':'Bereken mijn caloriebehoeftes voor vandaag op basis van mijn gewicht, workouts en activiteit. Geef antwoord in dit formaat:\n\n🔥 CALORIEBEHOEFTE VANDAAG\n• Basis metabolisme (BMR): [getal] kcal\n• Verbranding workouts: [getal] kcal\n• Totaal nodig: [getal] kcal\n\n🍽 VERDELING\n• Ontbijt: [getal] kcal\n• Lunch: [getal] kcal\n• Avondeten: [getal] kcal\n• Snacks: [getal] kcal\n\n💡 TIP\n• [persoonlijk advies]',
-    'VOEDINGSPATRONEN':'Analyseer de patronen tussen mijn voeding, lichaamssignalen, energie en stemming. Geef antwoord in dit formaat:\n\n🔍 GEDETECTEERDE PATRONEN\n• [patroon 1 met concrete cijfers]\n• [patroon 2 met concrete cijfers]\n• [patroon 3 met concrete cijfers]\n\n⚠ AANDACHTSPUNTEN\n• [mogelijke triggers voor huidklachten/spijsvertering]\n\n✅ WAT GOED GAAT\n• [positieve patronen]',
-    'VOEDING_ADVIES':'Geef persoonlijk voedingsadvies op basis van mijn data. Geef antwoord in dit formaat:\n\n🌾 DAGELIJKSE DOELEN\n• Eiwitten: [getal]g ([reden])\n• Vezels: [getal]g ([reden])\n• Koolhydraten: [getal]g ([reden])\n• Vetten: [getal]g ([reden])\n\n⏰ TIMING ADVIES\n• Ontbijt (7-9u): [wat eten]\n• Lunch (12-14u): [wat eten]\n• Voor workout: [wat eten]\n• Na workout: [wat eten]\n• Avond: [wat eten]\n\n💡 PERSOONLIJKE TIP\n• [tip gebaseerd op mijn specifieke data]',
-    'MAG_IK_TRAINEN':'Mag ik morgen trainen? Analyseer mijn HRV, spierpijn, vermoeidheid en trainingsfrequentie afgelopen dagen. Geef antwoord in dit formaat:\n\n🏋 ADVIES\n• [Ja train normaal / Lichter trainen / Rustdag aanbevolen]\n\n📊 WAAROM\n• [HRV/herstel observatie]\n• [spierpijn observatie]\n• [trainingsfrequentie observatie]\n\n🎯 SUGGESTIE\n• [concrete invulling voor morgen: CrossFit, Padel, of rust]',
-    'PUISTJES_TRIGGER':'Analyseer wat mijn puistjes/huidklachten triggert. Kijk specifiek naar voeding 24-48 uur voor elke huidklacht in mijn logs. Geef antwoord in dit formaat:\n\n🧐 MEEST WAARSCHIJNLIJKE TRIGGERS\n• [voeding/gedrag 1 met datum bewijs]\n• [voeding/gedrag 2 met datum bewijs]\n\n📅 PATROON (48u VERTRAGING)\n• [wat je at 1-2 dagen voor de klacht]\n\n✅ ADVIES\n• [concreet om te vermijden of testen]',
-    'PRE_CROSSFIT':'Wat is de beste pre-workout voeding voor mij specifiek voor CrossFit, gebaseerd op mijn eigen logs en energie scores na vergelijkbare maaltijden? Geef antwoord in dit formaat:\n\n⚡ BESTE PRE-CROSSFIT MAALTIJD\n• [wat werkte goed in mijn logs, met bewijs]\n\n⏰ TIMING\n• [hoeveel tijd van tevoren]\n\n❌ VERMIJDEN\n• [wat slecht uitpakte op basis van mijn data]\n\n💡 TIP\n• [concreet advies voor de volgende CrossFit sessie]',
-    'PRE_PADEL':'Wat is de beste pre-workout voeding voor mij specifiek voor Padel, gebaseerd op mijn eigen logs en energie scores na vergelijkbare maaltijden? Geef antwoord in dit formaat:\n\n🎾 BESTE PRE-PADEL MAALTIJD\n• [wat werkte goed in mijn logs, met bewijs]\n\n⏰ TIMING\n• [hoeveel tijd van tevoren]\n\n❌ VERMIJDEN\n• [wat slecht uitpakte op basis van mijn data]\n\n💡 TIP\n• [concreet advies voor de volgende Padel sessie]',
-    'SLAAP_SLECHT':'Analyseer waarom ik gisteren mogelijk slecht heb geslapen. Kijk naar alcohol, training, stress signalen, en dagnotities van gisteren. Geef antwoord in dit formaat:\n\n😴 MEEST WAARSCHIJNLIJKE OORZAAK\n• [hoofdoorzaak gebaseerd op data]\n\n🔍 ANDERE FACTOREN\n• [factor 1]\n• [factor 2]\n\n💡 VOOR VANNACHT\n• [concreet advies om beter te slapen]',
-    'ENERGIE_VOORSPELLING':'Voorspel mijn energieniveau voor vandaag op basis van mijn slaap, HRV en hoe gisteren ging. Geef antwoord in dit formaat:\n\n🔮 VOORSPELLING VANDAAG\n• Verwachte energie: [getal]/10\n• Reden: [gebaseerd op slaap/HRV/gisteren]\n\n📈 WAT HELPT VANDAAG\n• [concrete tip 1]\n• [concrete tip 2]\n\n⚠ LET OP\n• [waarschuwing als energie laag verwacht wordt]',
-    'BESTE_TIJDSTIP':'Op welk tijdstip van de dag train ik het beste, ochtend of avond, gebaseerd op mijn energiepatronen en workout data? Geef antwoord in dit formaat:\n\n⏰ BESTE TIJDSTIP\n• [Ochtend of Avond] is voor jou het beste omdat [reden met data]\n\n📊 BEWIJS UIT JE DATA\n• [observatie 1]\n• [observatie 2]\n\n🎯 SPECIFIEK PER SPORT\n• CrossFit: [beste tijdstip]\n• Padel: [beste tijdstip]',
-    'GOEDE_DAG_FORMULE':'Destilleer mijn persoonlijke formule voor een goede dag. Vergelijk mijn beste dagen (hoogste energie/stemming) met mijn slechtste dagen en zoek de gemeenschappelijke factoren. Geef antwoord in dit formaat:\n\n✨ MIJN GOEDE DAG FORMULE\n• Slaap: [optimaal aantal uren]\n• Water: [optimaal aantal liters]\n• Sport: [welk type/timing]\n• Voeding: [patroon dat werkt]\n\n📉 WAT EEN SLECHTE DAG VEROORZAAKT\n• [top factor]\n\n🎯 ACTIE VOOR MORGEN\n• [concrete tip om dichter bij je formule te komen]'
+    'WORKOUT_ADVIES':'Analyseer mijn recente workouts en geef beknopt advies. Max 3 bullets per sectie.\n\n💪 STATUS\n• [belasting beoordeling]\n\n📈 AANBEVELING\n• [wat vandaag/morgen]\n• [intensiteit]\n\n⚠ LET OP\n• [waarschuwing indien nodig]',
+    'KCAL_VANDAAG':'Bereken mijn caloriebehoefte voor vandaag. Wees concreet met getallen.\n\n🔥 VANDAAG\n• BMR: [kcal]\n• Workouts: [kcal]\n• Totaal nodig: [kcal]\n• Al gegeten: [kcal]\n• Nog nodig: [kcal]\n\n💡 TIP: [één concrete tip]',
+    'VOEDINGSPATRONEN':'Analyseer patronen in mijn voeding en lichaamssignalen. Gebruik echte datums.\n\n🔍 PATRONEN\n• [patroon 1 + bewijs]\n• [patroon 2 + bewijs]\n\n⚠ TRIGGER\n• [meest waarschijnlijke huid/spijsvertering trigger]\n\n✅ WAT WERKT\n• [positief patroon]',
+    'VOEDING_ADVIES':'Geef mij vandaag concreet voedingsadvies gebaseerd op mijn data.\n\n🌾 DOELEN VANDAAG\n• Eiwit: [g] | Koolh: [g] | Vet: [g]\n\n⏰ TIMING\n• Nu: [wat eten]\n• Voor training: [wat]\n• Avond: [wat]\n\n💡 [één persoonlijke tip]',
+    'MAG_IK_TRAINEN':'Mag ik vandaag trainen? Gebruik mijn HRV, spierpijn en trainingsload.\n\n🏋 ADVIES: [Ja / Lichter / Rust]\n\n📊 WAAROM\n• [herstel status]\n• [trainingsfrequentie]\n\n🎯 SUGGESTIE: [concreet wat te doen vandaag]',
+    'PUISTJES_TRIGGER':'Analyseer mijn huidklachten en zoek triggers in de 48u ervoor.\n\n🧐 TRIGGERS\n• [#1 + datum bewijs]\n• [#2 + datum bewijs]\n\n📅 PATROON: [timing van klacht na trigger]\n\n✅ ACTIE: [wat te vermijden of testen]',
+    'PRE_CROSSFIT':'Wat moet ik eten voor mijn volgende CrossFit op basis van wat in het verleden werkte?\n\n⚡ BESTE MAALTIJD\n• [wat + waarom uit mijn data]\n\n⏰ TIMING: [hoeveel uur van tevoren]\n\n❌ VERMIJD: [wat niet werkte]\n\n💡 TIP: [concreet voor vandaag]',
+    'PRE_PADEL':'Wat moet ik eten voor Padel op basis van mijn logs?\n\n🎾 BESTE MAALTIJD\n• [wat + waarom]\n\n⏰ TIMING: [wanneer]\n\n❌ VERMIJD: [wat slecht uitpakte]\n\n💡 TIP: [concreet advies]',
+    'SLAAP_SLECHT':'Waarom heb ik slecht geslapen? Analyseer gisteren.\n\n😴 OORZAAK: [hoofdreden]\n\n🔍 FACTOREN\n• [factor 1]\n• [factor 2]\n\n💡 VANNACHT: [één concreet advies]',
+    'ENERGIE_VOORSPELLING':'Hoe wordt mijn energie vandaag op basis van slaap, HRV en gisteren?\n\n🔮 VERWACHTING: [getal]/10\n• Reden: [korte uitleg]\n\n📈 WAT HELPT\n• [tip 1]\n• [tip 2]',
+    'BESTE_TIJDSTIP':'Wanneer train ik het beste op basis van mijn energiepatronen?\n\n⏰ BESTE TIJD: [ochtend/middag/avond] — [reden]\n\n📊 BEWIJS\n• [observatie uit data]\n\n🎯 CrossFit: [tijd] | Padel: [tijd]',
+    'GOEDE_DAG_FORMULE':'Wat zijn de ingrediënten van mijn beste dagen?\n\n✨ FORMULE\n• Slaap: [uur]\n• Water: [L]\n• Sport: [type/timing]\n• Voeding: [patroon]\n\n📉 SLECHTSTE DAGEN: [top trigger]\n\n🎯 MORGEN: [één concrete actie]',
+    'HERSTEL_ADVIES':'Ik heb net getraind. Geef hersteladvies op basis van mijn data.\n\n💪 HERSTEL STATUS: [hoe lang nodig]\n\n🍽️ EET NU\n• [eiwitbron] + [koolhydraten]\n• Timing: [wanneer]\n\n💤 SLAAP: [advies voor vanavond]\n\n💡 MORGEN: [training of rust?]',
+    'OCHTEND_CHECK':'Geef een persoonlijke ochtend-check op basis van mijn slaap, HRV en wat er vandaag staat.\n\n☀️ JOUW OCHTEND\n• Slaap: [beoordeling]\n• Energie verwachting: [getal]/10\n\n🎯 FOCUS VANDAAG\n• [tip 1]\n• [tip 2]\n\n🍳 ONTBIJT TIP: [concreet]',
+    'AVOND_CHECK':'Hoe was mijn dag? Geef een avond-samenvatting en tip voor morgen.\n\n🌙 DAG SAMENVATTING\n• Energie: [hoe was het]\n• Voeding: [goed/kan beter]\n• Beweging: [beoordeling]\n\n💡 VOOR MORGEN\n• [tip 1]\n• [tip 2]\n\n💤 SLAAPTIP: [advies voor vanavond]',
+    'WAT_ETEN_NU':'Wat moet ik nu eten op basis van mijn macro-doelen en wat ik vandaag al heb gegeten?\n\n🍽️ EET NU\n• [concreet gerecht of combinatie]\n• Kcal: ~[getal] | Eiwit: ~[g]\n\n⚡ TIMING: [wanneer ideaal]\n\n💡 TIP: [persoonlijk advies]',
+    'MACRO_CHECK':'Hoe sta ik er macro-technisch voor vandaag?\n\n📊 STATUS\n• Gegeten: [kcal] / [doelkcal] kcal\n• Eiwit: [g] / [g]g\n• Koolh: [g] / [g]g\n• Vet: [g] / [g]g\n\n🎯 NOG NODIG\n• [wat nog eten om doelen te halen]\n\n💡 TIP: [advies]'
   };
   runAI(prompts[q]||q);
 }
@@ -2802,6 +3023,10 @@ async function runAI(question){
   addChatMessage('user',question);
   var loadingId=addChatLoading();
   saveDayLocal();
+  // Bouw gespreksgeschiedenis (laatste 6 berichten, excl. welkomstbericht)
+  var gesprekHistory=chatHistory.slice(-6).map(function(m){
+    return{role:m.role==='user'?'user':'assistant',content:m.text};
+  });
   var allEntries=getEntries(); // ALLE dagen, geen limiet
   var recentEntries=allEntries.slice(0,21); // laatste 3 weken: volledig gedetailleerd
   var olderEntries=allEntries.slice(21); // alles daarvoor: compacte samenvatting
@@ -2871,7 +3096,8 @@ async function runAI(question){
         type:'askAI',
         question:question,
         ctx:ctx,
-        profiel:cachedProfielSheet||''
+        profiel:cachedProfielSheet||'',
+        gesprek:gesprekHistory
       })
     });
     var d=await r.json();
@@ -2893,12 +3119,18 @@ async function runAI(question){
 function renderHistory(){
   var entries=getEntries();var hl=document.getElementById('history-list');
   if(!entries.length){hl.innerHTML='<div class="empty"><div class="empty-ico">📅</div><div class="empty-title">Nog geen geschiedenis</div><div class="empty-sub">Sla je eerste dag op en het verschijnt hier.</div></div>';return;}
-  hl.innerHTML=entries.map(function(e,idx){
+  var filtered=entries.filter(function(e){return entryMatchesFilter(e);});
+  if(!filtered.length){
+    hl.innerHTML='<div class="empty"><div class="empty-ico">🔍</div><div class="empty-title">Geen logs in deze periode</div></div>';
+    return;
+  }
+  hl.innerHTML=filtered.map(function(e,idx){
     var chips=(e.chips||[]).map(c=>'<span class="tag t-amber">'+c+'</span>').join('');
-    var wos=(e.workouts||[]).map(w=>'<span class="tag t-sky">'+woIco(w.type)+' '+w.type+' '+w.duration+'min</span>').join('');
+    var wos=(e.workouts||[]).map(w=>'<span class="tag t-sky">'+woIco(w.type)+' '+w.type+' '+w.duration+'min'+(w.notes?' 📝':'')+'</span>').join('');
     var wx=e.weather?'<span class="tag t-sky">'+wxIco(e.weather.code)+' '+e.weather.temp+'°C</span>':'';
     var alcTotal=(e.alc_beer||0)+(e.alc_wine||0)+(e.alc_cocktail||0);
-    return'<div class="hist-day"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="hist-date">'+fmtDate(e.date)+(wx?' '+wx:'')+'</div><button onclick="openEditModal(\''+e.date+'\')" style="border:none;background:var(--paper2);border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:13px;color:var(--ink2);flex-shrink:0">✏️</button></div><div class="hist-row"><span>⚡'+(e.energy||'—')+'</span><span>😊'+(e.mood||'—')+'</span><span>😴'+(e.sleep||'—')+'</span><span>💧'+(e.water||'—')+'</span><span>🌳'+(e.outside_hrs||0)+'u</span><span>🍺'+alcTotal+'</span><span>🍽️'+(e.meals||[]).length+'</span></div>'+(wos?'<div style="margin-top:5px">'+wos+'</div>':'')+(chips?'<div style="margin-top:5px">'+chips+'</div>':'')+'</div>';
+    var note=e.daily_note?'<div style="font-size:12px;color:var(--ink2);margin-top:5px;font-style:italic">📝 '+e.daily_note.substring(0,80)+(e.daily_note.length>80?'…':'')+'</div>':'';
+    return'<div class="hist-day"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="hist-date">'+fmtDate(e.date)+(wx?' '+wx:'')+'</div><button onclick="openEditModal(\''+e.date+'\')" style="border:none;background:var(--paper2);border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:13px;color:var(--ink2);flex-shrink:0">✏️</button></div><div class="hist-row"><span>⚡'+(e.energy||'—')+'</span><span>😊'+(e.mood||'—')+'</span><span>😴'+(e.sleep||'—')+'</span><span>💧'+(e.water||'—')+'</span><span>🌳'+(e.outside_hrs||0)+'u</span><span>🍺'+alcTotal+'</span><span>🍽️'+(e.meals||[]).length+'</span></div>'+(wos?'<div style="margin-top:5px">'+wos+'</div>':'')+(chips?'<div style="margin-top:5px">'+chips+'</div>':'')+note+'</div>';
   }).join('');
 }
 
