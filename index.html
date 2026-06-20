@@ -148,6 +148,10 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
 .chat-msg.ai ul{margin:4px 0;padding-left:18px}
 .chat-msg.ai li{margin-bottom:4px}
 .chat-msg.loading{color:var(--ink3);font-style:italic}
+.typing-dots span{animation:typing-blink 1.2s infinite;display:inline-block;font-size:20px;line-height:1;margin:0 1px}
+.typing-dots span:nth-child(2){animation-delay:.2s}
+.typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes typing-blink{0%,60%,100%{opacity:.15}30%{opacity:1}}
 .chat-quick-row{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;flex-shrink:0;border-top:1px solid var(--paper3);background:var(--white)}
 .chat-quick-btn{flex-shrink:0;padding:7px 13px;border:1px solid var(--paper3);border-radius:var(--r-pill);background:var(--paper);font-size:12px;color:var(--ink2);cursor:pointer;font-family:inherit;white-space:nowrap}
 .chat-input-row{display:flex;gap:8px;padding:12px 14px;background:var(--white);border-top:1px solid var(--paper3);flex-shrink:0;padding-bottom:max(12px,env(safe-area-inset-bottom))}
@@ -380,24 +384,33 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
 
   <div class="card">
     <h2>🧑 Gezichtshuid analyse</h2>
-    <p style="font-size:13px;color:var(--ink2);margin-bottom:12px;line-height:1.6">Maak een selfie — AI analyseert huidconditie en vergelijkt met je recente signalen.</p>
+    <p style="font-size:13px;color:var(--ink2);margin-bottom:12px;line-height:1.6">Maak een selfie per dagdeel — AI analyseert en vergelijkt met je signalen en historische huiddata.</p>
+    <!-- Opgeslagen huidfoto's vandaag -->
+    <div id="skin-photos-list" style="margin-bottom:10px"></div>
+    <!-- Upload zone -->
     <div id="skin-uzone" class="upload-zone">
       <input type="file" accept="image/*" capture="user" id="skin-upload" onchange="handleSkinPhoto(event)">
       <div style="font-size:28px;margin-bottom:6px">🧑</div>
-      <div style="font-size:14px;color:var(--ink2)">Selfie of gezichtsfoto uploaden</div>
+      <div style="font-size:14px;color:var(--ink2)">Selfie uploaden</div>
       <div style="font-size:12px;color:var(--ink3);margin-top:4px">AI herkent puistjes, roodheid, droogheid</div>
     </div>
+    <!-- Preview nieuwe foto -->
     <div id="skin-prev" style="display:none;margin-top:12px">
       <img id="skin-img" style="width:100%;max-height:220px;object-fit:cover;border-radius:var(--r-sm);margin-bottom:10px" alt="huidfoto">
       <div id="skin-aibox" class="ai-box loading">Huid analyseren…</div>
-      <textarea id="skin-notes" placeholder="bijv. 'nieuw puistje op kaak'..."
-        style="width:100%;border:1px solid var(--paper3);border-radius:var(--r-sm);padding:10px 12px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--paper);resize:none;height:55px;outline:none;line-height:1.5;margin-top:8px"></textarea>
-      <div class="btn-row">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:10px 0 6px">Dagdeel</div>
+      <div class="chips" id="skin-moment-chips" style="margin-bottom:10px">
+        <button class="chip" onclick="selChip(this,'skin-moment-chips','Ochtend')">🌅 Ochtend</button>
+        <button class="chip" onclick="selChip(this,'skin-moment-chips','Middag')">☀️ Middag</button>
+        <button class="chip" onclick="selChip(this,'skin-moment-chips','Avond')">🌙 Avond</button>
+      </div>
+      <textarea id="skin-notes" placeholder="bijv. 'nieuw puistje op kaak, na zuivel gisteren'..."
+        style="width:100%;border:1px solid var(--paper3);border-radius:var(--r-sm);padding:10px 12px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--paper);resize:none;height:55px;outline:none;line-height:1.5;margin-top:4px"></textarea>
+      <div class="btn-row" style="margin-top:8px">
         <button class="btn" onclick="clearSkinPhoto()">Wissen</button>
         <button class="btn btn-moss" onclick="saveSkinPhoto()">Opslaan ↗</button>
       </div>
     </div>
-    <div id="skin-saved" style="display:none;margin-top:10px;padding:10px 12px;background:var(--moss2);border-radius:var(--r-sm);font-size:13px;color:var(--moss)">✓ Huidfoto opgeslagen</div>
   </div>
 
   <!-- Energy & mood -->
@@ -598,6 +611,10 @@ input[type=range].untouched::-webkit-slider-thumb{border-color:var(--ink3);backg
   <div class="card">
     <h2>🍽️ Maaltijden vandaag</h2>
     <div id="meals-list"><div class="empty" style="padding:14px"><div class="empty-ico">📷</div><div style="font-size:13px;color:var(--ink2)">Nog geen maaltijden gelogd</div></div></div>
+  </div>
+  <div class="card" id="skin-today-card" style="display:none">
+    <h2>🧑 Huidfoto's vandaag</h2>
+    <div id="skin-today-list"></div>
   </div>
   <div class="card">
     <h2>🏃 Workouts vandaag</h2>
@@ -917,7 +934,7 @@ function getLocalDateStr(d){
   return y+'-'+m+'-'+day;
 }
 var TODAY=getLocalDateStr();
-var wakeVal=null,meals=[],currentMeal=null,workouts=[],manualWoType=null,manualWoDur=30,manualWoInt=1,weatherData=null,userWeight=75,skinPhotoForToday=null;
+var wakeVal=null,meals=[],currentMeal=null,workouts=[],manualWoType=null,manualWoDur=30,manualWoInt=1,weatherData=null,userWeight=75,skinPhotosToday=[],currentSkinPhoto=null;
 var alcCounts={beer:0,wine:0,cocktail:0};
 var autosaveTimer=null,lastSynced=null;
 var pendingModalWorkoutIdx=null;
@@ -951,6 +968,10 @@ function isSliderTouched(id){
   return el&&!el.classList.contains('untouched');
 }
 function tc(btn){btn.classList.toggle('on');}
+function selChip(btn,groupId,val){
+  document.querySelectorAll('#'+groupId+' .chip').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+}
 // ── Inklapbare kaarten ──
 function toggleCard(trigger){
   var card=trigger.closest('.card');
@@ -1535,7 +1556,7 @@ function getFormState(){
     alc_cocktail:alcCounts.cocktail,
     chips:getChips(),
     meals:meals,
-    skin_photo:skinPhotoForToday,
+    skin_photos:skinPhotosToday,
     weather:weatherData,
     weight:userWeight,
     daily_note:dn?dn.value:''
@@ -1781,11 +1802,9 @@ function loadDraft(){
     }
     meals=s.meals||[];
     skinPhotoForToday=s.skin_photo||null;
-    if(skinPhotoForToday){
-      var skinSaved=document.getElementById('skin-saved');
-      var skinUzone=document.getElementById('skin-uzone');
-      if(skinSaved)skinSaved.style.display='block';
-      if(skinUzone)skinUzone.style.display='none';
+    if(s.skin_photos&&s.skin_photos.length){
+      skinPhotosToday=s.skin_photos;
+      renderSkinPhotosList();
     }
     if(s.weight){
       userWeight=s.weight;
@@ -1967,6 +1986,20 @@ function renderToday(){
   }).join(''):'<div style="font-size:13px;color:var(--ink2);padding:8px 0">Geen workouts vandaag.</div>';
   var chips=s.chips;var se=document.getElementById('sigs-today');
   se.innerHTML=chips&&chips.length?chips.map(c=>'<span class="tag t-amber">'+c+'</span>').join(' '):'<span style="font-size:13px;color:var(--ink2)">Niets gemarkeerd vandaag</span>';
+  // Huidfoto's vandaag
+  var skinCard=document.getElementById('skin-today-card');
+  var skinList=document.getElementById('skin-today-list');
+  if(skinCard&&skinList){
+    if(skinPhotosToday.length){
+      skinCard.style.display='block';
+      skinList.innerHTML=skinPhotosToday.map(function(p){
+        var thumb=p.imgSrc?'<img src="'+p.imgSrc+'" style="width:48px;height:48px;object-fit:cover;border-radius:var(--r-sm);flex-shrink:0">':'<div style="width:48px;height:48px;background:var(--paper2);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;font-size:22px">🧑</div>';
+        return '<div class="log-entry">'+thumb+'<div style="flex:1;min-width:0"><div class="log-time">'+p.time+' · '+p.moment+'</div><div class="log-text">'+(p.analysis||'').substring(0,100)+(p.analysis&&p.analysis.length>100?'…':'')+'</div>'+(p.notes?'<div style="font-size:11px;color:var(--ink3);margin-top:2px">'+p.notes+'</div>':'')+'</div></div>';
+      }).join('');
+    }else{
+      skinCard.style.display='none';
+    }
+  }
 }
 
 // ── Insights ──
@@ -2565,6 +2598,7 @@ function closeChatScreen(){
   document.getElementById('chat-screen').classList.remove('open');
   updateChatPreview();
   syncChatToSheets();
+  extractChatInzichten();
 }
 function syncChatToSheets(){
   if(!chatHistory.length)return;
@@ -2580,6 +2614,26 @@ function syncChatToSheets(){
   }).then(function(r){return r.json();}).then(function(d){
     if(d&&d.status==='ok'){
       localStorage.setItem('vt_chat_synced_count',String(chatHistory.length));
+    }
+  }).catch(function(){});
+}
+function extractChatInzichten(){
+  // Alleen als er minstens 2 nieuwe berichten zijn
+  var lastExtracted=parseInt(localStorage.getItem('vt_chat_extracted_count')||'0');
+  var newMsgs=chatHistory.slice(lastExtracted);
+  if(newMsgs.length<2)return;
+  // Stuur nieuwe berichten naar Apps Script voor kennisextractie
+  var gesprek=newMsgs.map(function(m){return(m.role==='user'?'Gebruiker: ':'Coach: ')+m.text;}).join('\n');
+  fetch(SCRIPT_URL,{
+    method:'POST',
+    body:JSON.stringify({
+      type:'extractInzichten',
+      gesprek:gesprek,
+      date:TODAY
+    })
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.status==='ok'){
+      localStorage.setItem('vt_chat_extracted_count',String(chatHistory.length));
     }
   }).catch(function(){});
 }
@@ -2654,7 +2708,7 @@ function addChatLoading(){
   var div=document.createElement('div');
   div.className='chat-msg ai loading';
   div.id=id;
-  div.textContent='Aan het denken…';
+  div.innerHTML='<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>';
   body.appendChild(div);
   body.scrollTop=body.scrollHeight;
   return id;
@@ -2662,6 +2716,32 @@ function addChatLoading(){
 function removeChatLoading(id){
   var el=document.getElementById(id);
   if(el)el.remove();
+}
+function typewriterMessage(text,formatted){
+  var body=document.getElementById('chat-body');
+  var div=document.createElement('div');
+  div.className='chat-msg ai';
+  body.appendChild(div);
+  body.scrollTop=body.scrollHeight;
+  // Splits tekst in woorden
+  var words=text.split(' ');
+  var i=0;
+  var current='';
+  function typeNext(){
+    if(i>=words.length){
+      // Klaar — render opgemaakt
+      div.innerHTML=formatted;
+      return;
+    }
+    current+=(i>0?' ':'')+words[i];
+    div.textContent=current;
+    body.scrollTop=body.scrollHeight;
+    i++;
+    // Snelheid: 18ms per woord
+    setTimeout(typeNext,18);
+  }
+  typeNext();
+  return div;
 }
 async function sendChatMessage(){
   var input=document.getElementById('chat-input');
@@ -2745,8 +2825,8 @@ async function runAI(question){
         gewicht:e.weight||'',
         weer:e.weather?e.weather.temp+'C (gevoels:'+e.weather.feels_like_sport+'C, vochtigheid:'+e.weather.humidity+'%, wind:'+e.weather.wind+'km/h, neerslag:'+e.weather.precip+'mm, UV:'+e.weather.uv+', max:'+e.weather.temp_max+'C min:'+e.weather.temp_min+'C)':'' ,
         dagnotitie:e.daily_note||'',
-        huidanalyse:e.skin_photo?(e.skin_photo.analysis||'').substring(0,250):'',
-        huidnotitie:e.skin_photo?(e.skin_photo.notes||''):'',
+        huidanalyse:e.skin_photos&&e.skin_photos.length?e.skin_photos.map(function(p){return(p.moment||'dag')+': '+(p.analysis||'').substring(0,150);}).join(' | '):(e.skin_photo?(e.skin_photo.analysis||'').substring(0,250):''),
+        huidnotitie:e.skin_photos&&e.skin_photos.length?e.skin_photos.map(function(p){return p.notes||'';}).filter(Boolean).join(' | '):(e.skin_photo?(e.skin_photo.notes||''):''),
         workouts:(e.workouts||[]).map(function(w){return w.type+' '+w.duration+'min'+(w.kcal?' '+w.kcal+'kcal':'')+(w.location?' '+({'Binnen':'🏢','Buiten':'🌳'}[w.location]||'')+w.location:'')+(w.feeling?' gevoel:'+w.feeling:'');}),
         maaltijden:(e.meals||[]).map(function(m){return{
           tijd:m.time,type:m.type||'Maaltijd',kcal:m.kcal||0,
@@ -2785,14 +2865,23 @@ async function runAI(question){
     persoonlijk_profiel_sheet:cachedProfielSheet||'Niet geladen.'
   });
   try{
-    var url=SCRIPT_URL+'?action=askAI';
-    url+='&question='+encodeURIComponent(question);
-    url+='&ctx='+encodeURIComponent(ctx);
-    url+='&profiel='+encodeURIComponent(cachedProfielSheet||'');
-    var r=await fetch(url);
+    var r=await fetch(SCRIPT_URL,{
+      method:'POST',
+      body:JSON.stringify({
+        type:'askAI',
+        question:question,
+        ctx:ctx,
+        profiel:cachedProfielSheet||''
+      })
+    });
     var d=await r.json();
     removeChatLoading(loadingId);
-    addChatMessage('ai',d.answer||'Geen antwoord ontvangen.');
+    var answer=d.answer||'Geen antwoord ontvangen.';
+    var formatted=formatAIResponse(answer);
+    typewriterMessage(answer,formatted);
+    chatHistory.push({role:'ai',text:answer,ts:Date.now()});
+    saveChatHistory();
+    updateChatPreview();
   }catch(e){
     removeChatLoading(loadingId);
     addChatMessage('ai','Fout: '+e.toString());
@@ -2995,15 +3084,10 @@ function handleSkinPhoto(e){
     document.getElementById('skin-uzone').style.display='none';
     var box=document.getElementById('skin-aibox');
     box.className='ai-box loading';box.textContent='Huid analyseren…';
-    // Verklein voor versturen
     var img=new Image();
     img.onload=function(){
-      var maxSize=800;
-      var w=img.width,h=img.height;
-      if(w>maxSize||h>maxSize){
-        if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}
-        else{w=Math.round(w*maxSize/h);h=maxSize;}
-      }
+      var maxSize=800,w=img.width,h=img.height;
+      if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}else{w=Math.round(w*maxSize/h);h=maxSize;}}
       var canvas=document.createElement('canvas');
       canvas.width=w;canvas.height=h;
       canvas.getContext('2d').drawImage(img,0,0,w,h);
@@ -3014,26 +3098,68 @@ function handleSkinPhoto(e){
   };r.readAsDataURL(f);
 }
 async function analyseSkin(b64,mt,box,src){
-  var entries=getEntries().slice(0,7);
+  // Bouw rijke context: recente huidklachten, voeding, alcohol, UV
+  var entries=getEntries().slice(0,14);
   var skinHist=entries.map(function(e){
-    var sc=(e.chips||[]).filter(function(c){return['Puistjes','Uitbraak','Roodheid','Rode oren','Rode ogen','Droog','Opgezwollen'].some(function(s){return c.includes(s);});});
-    return sc.length?e.date+': '+sc.join(', '):null;
-  }).filter(Boolean).join(' | ');
-  var prompt='Je bent een huidspecialist. Analyseer dit gezicht:\n1) Wat zie je (roodheid, puistjes, droogheid, zwelling)\n2) Huidconditie: Goed/Matig/Aandacht nodig\n3) Recente signalen: '+skinHist+'\n4) Advies\nMax 4 zinnen, in het Nederlands.';
+    var sc=(e.chips||[]).filter(function(c){return['Puistjes','Uitbraak','Roodheid','Rode oren','Rode ogen','Droog','Opgezwollen','Jeukend'].some(function(s){return c.includes(s);});});
+    var alc=(e.alc_beer||0)+(e.alc_wine||0)+(e.alc_cocktail||0);
+    var uv=e.weather&&e.weather.uv?'UV:'+e.weather.uv:'';
+    var meal_notes=(e.meals||[]).map(function(m){return m.notes||m.type;}).filter(Boolean).join(',');
+    var parts=[];
+    if(sc.length)parts.push('huid:'+sc.join('+'));
+    if(alc>0)parts.push('alc:'+alc);
+    if(uv)parts.push(uv);
+    if(meal_notes)parts.push('eten:'+meal_notes.substring(0,40));
+    if(e.skin_photos)parts.push('foto:'+e.skin_photos.length+'x');
+    return parts.length?e.date+' ['+parts.join(' | ')+']':null;
+  }).filter(Boolean).join('\n');
+
+  // Vorige huidfoto analyses vandaag
+  var prevAnalyses=skinPhotosToday.map(function(p,i){
+    return 'Foto '+(i+1)+' ('+p.moment+'): '+(p.analysis||'').substring(0,100);
+  }).join('\n');
+
+  var prompt='Je bent een huidspecialist die een gebruiker al meerdere weken volgt.\n\n'+
+    'HUID- EN LEEFSTIJLHISTORIE AFGELOPEN 14 DAGEN:\n'+(skinHist||'Geen data')+'\n\n'+
+    (prevAnalyses?'EERDERE HUIDFOTO ANALYSES VANDAAG:\n'+prevAnalyses+'\n\n':'')+
+    'Analyseer nu deze nieuwe foto en geef:\n'+
+    '1) Huidconditie nu (roodheid, puistjes, droogheid, glans)\n'+
+    '2) Vergelijking met recente signalen — beter of slechter?\n'+
+    '3) Meest waarschijnlijke trigger op basis van de historiedata\n'+
+    '4) Één concreet advies voor vandaag\n'+
+    'Max 5 zinnen. In het Nederlands.';
+
   try{
     var resp=await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({type:'analysePhoto',photoType:'skin',imageData:b64,mediaType:mt,prompt:prompt})});
     var d=await resp.json();var t=d.analyse||d.answer||'';
-    box.className='ai-box';box.textContent=t||'Opgeslagen.';
+    box.className='ai-box';box.textContent=t||'Geen analyse ontvangen.';
     currentSkinPhoto={analysis:t||'',imgSrc:src};
-  }catch(e){box.className='ai-box';box.textContent='Offline.';currentSkinPhoto={analysis:'',imgSrc:src};}
+  }catch(err){box.className='ai-box';box.textContent='Fout bij analyse.';currentSkinPhoto={analysis:'',imgSrc:src};}
 }
 function saveSkinPhoto(){
-  if(!currentSkinPhoto)return;
+  if(!currentSkinPhoto){toast('Wacht op analyse');return;}
   var notes=document.getElementById('skin-notes').value;
-  skinPhotoForToday={imgSrc:currentSkinPhoto.imgSrc,analysis:currentSkinPhoto.analysis,notes:notes};
-  document.getElementById('skin-prev').style.display='none';
-  document.getElementById('skin-saved').style.display='block';
-  document.getElementById('skin-uzone').style.display='none';
+  var momentChip=document.querySelector('#skin-moment-chips .chip.on');
+  var moment=momentChip?momentChip.textContent.trim():'Dag';
+  // Maak thumbnail
+  var thumbSrc=currentSkinPhoto.imgSrc;
+  if(thumbSrc&&thumbSrc.length>50000){
+    try{
+      var tc=document.createElement('canvas');tc.width=80;tc.height=80;
+      var ti=new Image();ti.src=thumbSrc;
+      tc.getContext('2d').drawImage(ti,0,0,80,80);
+      thumbSrc=tc.toDataURL('image/jpeg',0.6);
+    }catch(te){thumbSrc='';}
+  }
+  skinPhotosToday.push({
+    time:new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}),
+    moment:moment,
+    imgSrc:thumbSrc,
+    analysis:currentSkinPhoto.analysis,
+    notes:notes
+  });
+  clearSkinPhoto();
+  renderSkinPhotosList();
   toast('Huidfoto opgeslagen ✓');
   saveDayLocal();
 }
@@ -3042,6 +3168,31 @@ function clearSkinPhoto(){
   document.getElementById('skin-prev').style.display='none';
   document.getElementById('skin-uzone').style.display='block';
   document.getElementById('skin-upload').value='';
+  document.querySelectorAll('#skin-moment-chips .chip').forEach(function(b){b.classList.remove('on');});
+  var notesEl=document.getElementById('skin-notes');if(notesEl)notesEl.value='';
+}
+function removeSkinPhoto(i){
+  skinPhotosToday.splice(i,1);
+  renderSkinPhotosList();
+  saveDayLocal();
+  toast('Foto verwijderd');
+}
+function renderSkinPhotosList(){
+  var list=document.getElementById('skin-photos-list');
+  if(!list)return;
+  if(!skinPhotosToday.length){list.innerHTML='';return;}
+  list.innerHTML=skinPhotosToday.map(function(p,i){
+    var thumb=p.imgSrc?'<img src="'+p.imgSrc+'" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0">':'<div style="width:44px;height:44px;background:var(--paper2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px">🧑</div>';
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--paper2)">'
+      +thumb
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:12px;font-weight:500;color:var(--ink2)">'+p.time+' · '+p.moment+'</div>'
+      +'<div style="font-size:12px;color:var(--ink);margin-top:2px;line-height:1.5">'+(p.analysis?p.analysis.substring(0,80)+'…':'')+'</div>'
+      +(p.notes?'<div style="font-size:11px;color:var(--ink3);margin-top:2px">'+p.notes+'</div>':'')
+      +'</div>'
+      +'<button onclick="removeSkinPhoto('+i+')" style="background:none;border:none;color:var(--ink3);font-size:16px;cursor:pointer;padding:0;flex-shrink:0">✕</button>'
+      +'</div>';
+  }).join('');
 }
 
 function clearAll(){
